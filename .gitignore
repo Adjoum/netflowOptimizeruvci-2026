@@ -1,0 +1,25 @@
+cat > .gitignore << 'EOF'
+# Binaires compilés
+netflow.exe
+netflow
+netflow_debug
+netflow_debug.exe
+tests/run_tests
+tests/run_tests.exe
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# VS Code
+.vscode/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+EOF

@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetFlow Optimizer & Security Analyzer — UVCI ALC2101</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#060a12;--bg2:#0c1220;--bg3:#111827;--border:#1e2d47;
+  --accent:#00d4ff;--accent2:#7c3aed;--accent3:#10b981;--accent4:#f59e0b;
+  --danger:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#475569;
+  --node-default:#1e40af;--node-path:#00d4ff;--node-start:#10b981;
+  --node-end:#ef4444;--node-visited:#7c3aed;--node-bridge:#f59e0b;
+  --edge-default:#1e3a5f;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;overflow:hidden}
+#app{display:grid;grid-template-columns:270px 1fr 310px;grid-template-rows:52px 1fr;height:100vh}
+#header{grid-column:1/-1;display:flex;align-items:center;padding:0 20px;background:var(--bg2);border-bottom:1px solid var(--border);gap:14px;z-index:10}
+#sidebar{background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+#canvas-area{background:var(--bg);position:relative;overflow:hidden}
+#panel{background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+
+/* HEADER */
+.logo{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--accent);letter-spacing:2px;white-space:nowrap}
+.logo span{color:var(--text2)}
+.header-badge{font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;color:var(--text3)}
+.header-stats{display:flex;gap:14px;margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px}
+.hstat{display:flex;align-items:center;gap:5px;color:var(--text2)}
+.hstat-val{color:var(--accent);font-weight:700}
+
+/* SIDEBAR — scrollable */
+#sidebar-scroll{flex:1;overflow-y:auto;overflow-x:hidden}
+#sidebar-scroll::-webkit-scrollbar{width:3px}
+#sidebar-scroll::-webkit-scrollbar-track{background:transparent}
+#sidebar-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.sidebar-section{padding:10px 12px}
+.sidebar-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
+.module-tabs{display:flex;flex-direction:column;gap:2px}
+.module-tab{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;cursor:pointer;transition:all .15s;border:1px solid transparent;font-size:13px;color:var(--text2)}
+.module-tab:hover{background:var(--bg3);color:var(--text)}
+.module-tab.active{background:rgba(0,212,255,.08);border-color:rgba(0,212,255,.2);color:var(--accent)}
+.module-tab .tab-icon{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.module-tab.active .tab-icon{background:rgba(0,212,255,.15)}
+.sidebar-divider{border:none;border-top:1px solid var(--border);margin:6px 12px}
+.btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;transition:all .15s;font-family:'Space Grotesk',sans-serif;font-weight:500;width:100%}
+.btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.06)}
+.btn.primary{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.08)}
+.btn.primary:hover{background:rgba(0,212,255,.15)}
+.btn.success{border-color:var(--accent3);color:var(--accent3);background:rgba(16,185,129,.08)}
+.btn.success:hover{background:rgba(16,185,129,.15)}
+.btn.danger{border-color:var(--danger);color:var(--danger);background:rgba(239,68,68,.08)}
+.btn.warn{border-color:var(--accent4);color:var(--accent4);background:rgba(245,158,11,.08)}
+.btn.small{padding:5px 8px;font-size:11px}
+.btn-group{display:flex;gap:4px}
+.btn-group .btn{flex:1}
+.btn-group2{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+
+/* GRAPH CANVAS */
+svg{width:100%;height:100%}
+.node-circle{cursor:grab;transition:fill .2s,stroke .2s}
+.node-circle:active{cursor:grabbing}
+.node-label{font-family:'JetBrains Mono',monospace;font-size:10px;fill:#fff;text-anchor:middle;dominant-baseline:central;pointer-events:none;font-weight:700}
+.edge-weight{font-family:'JetBrains Mono',monospace;font-size:9px;fill:var(--text3)}
+.tooltip{position:absolute;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:100;max-width:220px}
+.canvas-overlay{position:absolute;top:10px;left:10px;display:flex;gap:6px}
+.canvas-badge{background:rgba(6,10,18,.85);border:1px solid var(--border);padding:3px 9px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)}
+.canvas-badge span{color:var(--accent)}
+.legend{position:absolute;bottom:10px;left:10px;background:rgba(6,10,18,.9);border:1px solid var(--border);border-radius:8px;padding:9px;display:flex;flex-direction:column;gap:4px}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text2);font-family:'JetBrains Mono',monospace}
+.legend-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+/* PANEL */
+.panel-header{padding:12px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.panel-body{flex:1;overflow-y:auto;padding:10px}
+.panel-body::-webkit-scrollbar{width:4px}
+.panel-body::-webkit-scrollbar-track{background:transparent}
+.panel-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* FORMS */
+.form-group{margin-bottom:8px}
+.form-label{font-size:10px;color:var(--text3);margin-bottom:3px;display:block;font-family:'JetBrains Mono',monospace}
+.form-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:6px 9px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
+.form-input:focus{border-color:var(--accent)}
+select.form-input option{background:var(--bg3)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.form-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+
+/* RESULTS */
+.result-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px}
+.result-title{font-size:10px;font-weight:600;color:var(--accent);font-family:'JetBrains Mono',monospace;margin-bottom:7px;text-transform:uppercase;letter-spacing:1px}
+.result-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(30,45,71,.5)}
+.result-row:last-child{border-bottom:none}
+.result-key{font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.result-val{font-size:12px;color:var(--text);font-family:'JetBrains Mono',monospace;font-weight:600}
+.result-val.good{color:var(--accent3)}
+.result-val.warn{color:var(--accent4)}
+.result-val.bad{color:var(--danger)}
+
+/* PATH */
+.path-display{display:flex;flex-wrap:wrap;gap:3px;align-items:center;margin:6px 0}
+.path-node{background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.3);color:var(--accent);padding:2px 7px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600}
+.path-arrow{color:var(--text3);font-size:12px}
+
+/* QUEUE */
+.queue-container{display:flex;flex-direction:column;gap:4px;margin:6px 0}
+.queue-item{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 9px;transition:all .2s}
+.queue-item.top{border-color:var(--accent);background:rgba(0,212,255,.04)}
+.queue-prio{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;flex-shrink:0}
+.queue-info{flex:1}
+.queue-id{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--text)}
+.queue-meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)}
+
+/* PERF */
+.perf-row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.perf-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);width:38px;text-align:right}
+.perf-bar-wrap{flex:1;height:14px;background:var(--bg);border-radius:3px;overflow:hidden}
+.perf-bar{height:100%;border-radius:3px;transition:width .6s ease}
+.perf-val{font-family:'JetBrains Mono',monospace;font-size:10px;width:60px;text-align:right}
+
+/* BADGES */
+.sec-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:3px;font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:700}
+.sec-badge.critical{background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.3)}
+.sec-badge.warn{background:rgba(245,158,11,.15);color:var(--accent4);border:1px solid rgba(245,158,11,.3)}
+.sec-badge.ok{background:rgba(16,185,129,.15);color:var(--accent3);border:1px solid rgba(16,185,129,.3)}
+
+/* LOG */
+.log-output{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3);max-height:120px;overflow-y:auto;line-height:1.7}
+.log-output .log-warn{color:var(--accent4)}
+.log-output .log-err{color:var(--danger)}
+.log-output .log-info{color:var(--text3)}
+
+/* TRAVERSAL */
+.traversal-steps{display:flex;flex-wrap:wrap;gap:3px}
+.step-node{padding:2px 6px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:10px;border:1px solid;animation:slideIn .3s ease forwards;opacity:0}
+.step-level{width:100%;font-size:9px;color:var(--text3);margin-top:4px;letter-spacing:1px}
+
+/* FILE LOAD SECTION */
+.file-load-section{background:var(--bg);border:1px dashed var(--border);border-radius:6px;padding:10px;margin-bottom:6px}
+.file-load-section:hover{border-color:var(--accent);background:rgba(0,212,255,.03)}
+
+/* NODE DELETE BTN */
+.del-node-btn{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--danger);border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer;font-family:'JetBrains Mono',monospace;margin-left:4px}
+.del-node-btn:hover{background:rgba(239,68,68,.2)}
+.del-edge-btn{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--danger);border-radius:4px;padding:2px 6px;font-size:9px;cursor:pointer;font-family:'JetBrains Mono',monospace}
+
+/* ANIMATIONS */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes slideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pathFlow{from{stroke-dashoffset:20}to{stroke-dashoffset:0}}
+.animating .on-path{animation:pathFlow 0.5s linear infinite;stroke-dasharray:6 3}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div class="logo">NetFlow<span>Optimizer</span></div>
+    <div class="header-badge">ALC2101 · UVCI 2025-2026</div>
+    <div class="header-stats">
+      <div class="hstat">Nœuds <span class="hstat-val" id="h-nodes">0</span></div>
+      <div class="hstat">Arêtes <span class="hstat-val" id="h-edges">0</span></div>
+      <div class="hstat">Type <span class="hstat-val" id="h-type">—</span></div>
+      <div class="hstat">Mode <span class="hstat-val" id="h-mode" style="color:var(--accent4)">Graphe</span></div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR (scrollable) -->
+  <div id="sidebar">
+    <div id="sidebar-scroll">
+
+      <!-- Modules -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Modules</div>
+        <div class="module-tabs">
+          <div class="module-tab active" data-mod="graph" onclick="switchModule('graph')">
+            <div class="tab-icon">🗺️</div>
+            <div><div style="font-weight:600">Graphe</div><div style="font-size:10px;color:var(--text3)">Réseau & arêtes</div></div>
+          </div>
+          <div class="module-tab" data-mod="routing" onclick="switchModule('routing')">
+            <div class="tab-icon">🔀</div>
+            <div><div style="font-weight:600">Routage</div><div style="font-size:10px;color:var(--text3)">Dijkstra · Bellman-Ford</div></div>
+          </div>
+          <div class="module-tab" data-mod="security" onclick="switchModule('security')">
+            <div class="tab-icon">🛡️</div>
+            <div><div style="font-weight:600">Sécurité</div><div style="font-size:10px;color:var(--text3)">DFS · BFS · Tarjan</div></div>
+          </div>
+          <div class="module-tab" data-mod="queue" onclick="switchModule('queue')">
+            <div class="tab-icon">📦</div>
+            <div><div style="font-weight:600">File de Paquets</div><div style="font-size:10px;color:var(--text3)">Priorité · Stats</div></div>
+          </div>
+          <div class="module-tab" data-mod="perf" onclick="switchModule('perf')">
+            <div class="tab-icon">📊</div>
+            <div><div style="font-weight:600">Performance</div><div style="font-size:10px;color:var(--text3)">Comparaison · Bench</div></div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="sidebar-divider">
+
+      <!-- Charger un fichier réseau -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Charger Réseau</div>
+        <div class="file-load-section">
+          <div class="form-group">
+            <label class="form-label">Fichier local (.txt)</label>
+            <input type="file" id="file-input" accept=".txt" style="display:none" onchange="loadFromFile(this)">
+            <button class="btn primary" onclick="document.getElementById('file-input').click()">📂 Ouvrir fichier .txt</button>
+          </div>
+          <div class="form-group" style="margin-top:6px">
+            <label class="form-label">Chemin serveur (data/)</label>
+            <div style="display:flex;gap:4px">
+              <input class="form-input" id="server-file" placeholder="reseau_demo.txt" style="flex:1">
+              <button class="btn small primary" onclick="loadFromServer()" style="width:auto;padding:6px 10px">▶</button>
+            </div>
+          </div>
+        </div>
+        <button class="btn primary" onclick="loadDemo()">⚡ Réseau Démo (8 nœuds)</button>
+        <div style="margin-top:4px">
+        <button class="btn primary" onclick="loadDemo2()">🌐 Réseau Étendu (13 n.)</button>
+        </div>
+        <div style="margin-top:4px">
+        <button class="btn" onclick="generateRandom()">🎲 Graphe Aléatoire</button>
+        </div>
+        <div style="margin-top:4px" class="btn-group">
+          <button class="btn small danger" onclick="clearGraph()">🗑️ Vider</button>
+          <button class="btn small" onclick="toggleOriented()">⇄ <span id="orient-label">Orienté</span></button>
+          <button class="btn small" onclick="saveGraph()">💾 Sauvegarder</button>
+        </div>
+      </div>
+
+      <hr class="sidebar-divider">
+
+      <!-- Ajouter Nœud -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Ajouter Nœud</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">ID</label>
+            <input class="form-input" id="n-id" type="number" min="0" value="8">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nom</label>
+            <input class="form-input" id="n-name" value="N8">
+          </div>
+        </div>
+        <button class="btn success" onclick="addNodeFromForm()">+ Ajouter Nœud</button>
+      </div>
+
+      <hr class="sidebar-divider">
+
+      <!-- Supprimer Nœud -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Supprimer Nœud</div>
+        <div class="form-group">
+          <input class="form-input" id="del-n-id" type="number" min="0" placeholder="ID du nœud">
+        </div>
+        <button class="btn danger" onclick="deleteNodeFromForm()">✕ Supprimer Nœud</button>
+      </div>
+
+      <hr class="sidebar-divider">
+
+      <!-- Ajouter Arête (4 métriques) -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Ajouter Arête</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Source</label><input class="form-input" id="e-src" type="number" min="0" value="0"></div>
+          <div class="form-group"><label class="form-label">Destination</label><input class="form-input" id="e-dst" type="number" min="0" value="1"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Latence (ms)</label><input class="form-input" id="e-lat" type="number" value="10" step="0.1"></div>
+          <div class="form-group"><label class="form-label">Bande Pass. (Mbps)</label><input class="form-input" id="e-bw" type="number" value="100"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Coût (€)</label><input class="form-input" id="e-cost" type="number" value="1" step="0.1"></div>
+          <div class="form-group"><label class="form-label">Sécurité (0-10)</label><input class="form-input" id="e-sec" type="number" min="0" max="10" value="8"></div>
+        </div>
+        <button class="btn success" onclick="addEdgeFromForm()">+ Ajouter Arête</button>
+      </div>
+
+      <hr class="sidebar-divider">
+
+      <!-- Supprimer Arête -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Supprimer Arête</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Source</label><input class="form-input" id="del-e-src" type="number" min="0" value="0"></div>
+          <div class="form-group"><label class="form-label">Destination</label><input class="form-input" id="del-e-dst" type="number" min="0" value="1"></div>
+        </div>
+        <button class="btn danger" onclick="deleteEdgeFromForm()">✕ Supprimer Arête</button>
+      </div>
+
+      <hr class="sidebar-divider">
+
+      <!-- Vue graphe -->
+      <div class="sidebar-section" style="padding-bottom:16px">
+        <div class="sidebar-label">Vue</div>
+        <button class="btn small" onclick="resetZoom()">🎯 Centrer la vue</button>
+      </div>
+
+    </div><!-- end sidebar-scroll -->
+  </div>
+
+  <!-- CANVAS -->
+  <div id="canvas-area">
+    <div class="canvas-overlay">
+      <div class="canvas-badge">Mode: <span id="mode-badge-txt">Sélection</span></div>
+      <div class="canvas-badge">Sélectionné: <span id="sel-badge">—</span></div>
+    </div>
+    <div id="svg-container" style="width:100%;height:100%"></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--node-start)"></div>Source</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--node-end)"></div>Destination</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--node-path)"></div>Sur le chemin</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--node-visited)"></div>Visité (DFS/BFS)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--accent4)"></div>Pont / Point critique</div>
+      <div class="legend-item"><div style="width:20px;height:2px;background:#1e3a5f;border-top:1px dashed #ef4444;margin-right:-2px"></div>Sécurité faible</div>
+    </div>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <!-- PANEL -->
+  <div id="panel">
+
+    <!-- MODULE GRAPH -->
+    <div id="mod-graph" style="display:flex;flex-direction:column;height:100%">
+      <div class="panel-header">🗺️ Module 1 — Gestion du Réseau</div>
+      <div class="panel-body">
+        <div class="result-card">
+          <div class="result-title">Statistiques du Graphe</div>
+          <div class="result-row"><span class="result-key">Nœuds</span><span class="result-val" id="g-nodes">0</span></div>
+          <div class="result-row"><span class="result-key">Arêtes</span><span class="result-val" id="g-edges">0</span></div>
+          <div class="result-row"><span class="result-key">Orientation</span><span class="result-val" id="g-orient">—</span></div>
+          <div class="result-row"><span class="result-key">Degré moyen</span><span class="result-val" id="g-degree">—</span></div>
+          <div class="result-row"><span class="result-key">Latence moy.</span><span class="result-val" id="g-lat">—</span></div>
+          <div class="result-row"><span class="result-key">BW moy.</span><span class="result-val" id="g-bw">—</span></div>
+        </div>
+        <div class="result-card" id="selected-node-card" style="display:none">
+          <div class="result-title">Nœud Sélectionné</div>
+          <div id="selected-node-info"></div>
+        </div>
+        <!--<div class="result-card">
+          <div class="result-title">Matrice d'adjacence</div>
+          <div id="matrix-display" style="overflow-x:auto"></div>
+        </div>  -->
+        <!-- APRÈS — affichage adaptatif -->
+        <div class="result-card">
+          <div class="result-title">Représentation du Graphe</div>
+          <!-- Badge densité -->
+          <div id="rep-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px"></div>
+          <!-- Liste ou Matrice selon densité -->
+          <div id="rep-display" style="overflow-x:auto"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODULE ROUTING -->
+    <div id="mod-routing" style="display:none;flex-direction:column;height:100%">
+      <div class="panel-header">🔀 Module 2 — Routage Optimal</div>
+      <div class="panel-body">
+        <div class="result-card">
+          <div class="result-title">Paramètres</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Source</label><input class="form-input" id="r-src" type="number" value="0"></div>
+            <div class="form-group"><label class="form-label">Destination</label><input class="form-input" id="r-dst" type="number" value="7"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Métrique d'optimisation</label>
+            <select class="form-input" id="r-metric">
+              <option value="latence">Latence (ms) — minimiser délai</option>
+              <option value="cout">Coût (€) — minimiser coût</option>
+              <option value="securite">Sécurité — maximiser sécurité</option>
+            </select>
+          </div>
+          <div class="btn-group" style="margin-bottom:4px">
+            <button class="btn primary" onclick="runDijkstra()">🟦 Dijkstra</button>
+            <button class="btn warn" onclick="runBellmanFord()">🟨 Bellman-Ford</button>
+          </div>
+          <button class="btn success" onclick="runCompare()">⚖️ Comparer les deux algorithmes</button>
+        </div>
+        <div class="result-card">
+          <div class="result-title">K Plus Courts Chemins</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Source</label><input class="form-input" id="k-src" type="number" value="0"></div>
+            <div class="form-group"><label class="form-label">Dest</label><input class="form-input" id="k-dst" type="number" value="7"></div>
+          </div>
+          <div class="form-group"><label class="form-label">K (nombre de chemins)</label><input class="form-input" id="k-val" type="number" value="3" min="1" max="5"></div>
+          <button class="btn" onclick="runKPaths()">🔢 Trouver K chemins alternatifs</button>
+        </div>
+        <div class="result-card">
+          <div class="result-title">Chemin Contraint (Backtracking)</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Source</label><input class="form-input" id="c-src" type="number" value="0"></div>
+            <div class="form-group"><label class="form-label">Dest</label><input class="form-input" id="c-dst" type="number" value="7"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">BW min (Mbps)</label><input class="form-input" id="c-bw" type="number" value="200"></div>
+            <div class="form-group"><label class="form-label">Coût max (€)</label><input class="form-input" id="c-cost" type="number" value="20"></div>
+          </div>
+          <div class="form-group"><label class="form-label">Sécurité min (0-10)</label><input class="form-input" id="c-sec" type="number" value="5" min="0" max="10"></div>
+          <button class="btn" onclick="runConstrained()">🔒 Chemin avec contraintes</button>
+        </div>
+        <div id="routing-result"></div>
+      </div>
+    </div>
+
+    <!-- MODULE SECURITY -->
+    <div id="mod-security" style="display:none;flex-direction:column;height:100%">
+      <div class="panel-header">🛡️ Module 3 — Sécurité & Anomalies</div>
+      <div class="panel-body">
+        <div class="result-card">
+          <div class="result-title">Parcours de Graphe</div>
+          <div class="form-group"><label class="form-label">Nœud de départ</label><input class="form-input" id="trav-start" type="number" value="0"></div>
+          <div class="btn-group">
+            <button class="btn primary" onclick="runDFS()">🔵 DFS</button>
+            <button class="btn success" onclick="runBFS()">🟢 BFS</button>
+          </div>
+        </div>
+        <div id="traversal-result"></div>
+        <div class="result-card" style="margin-top:6px">
+          <div class="result-title">Analyse de Sécurité</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <button class="btn" onclick="runCycleDetect()">🔄 Détecter Cycles</button>
+            <button class="btn" onclick="runArticulation()">⚠️ Points d'Articulation</button>
+            <button class="btn" onclick="runBridges()">🌉 Ponts (Arêtes Critiques)</button>
+            <button class="btn" onclick="runComponents()">🔗 Composantes Connexes</button>
+            <button class="btn" onclick="runTarjan()">🌀 Tarjan — SCC</button>
+            <button class="btn primary" onclick="runFullSecurity()">🛡️ Rapport Complet</button>
+          </div>
+        </div>
+        <div id="security-result"></div>
+      </div>
+    </div>
+
+    <!-- MODULE QUEUE -->
+    <div id="mod-queue" style="display:none;flex-direction:column;height:100%">
+      <div class="panel-header">📦 Module 4 — File de Paquets</div>
+      <div class="panel-body">
+        <div class="result-card">
+          <div class="result-title">Enfiler un Paquet</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Source</label><input class="form-input" id="q-src" type="number" value="0"></div>
+            <div class="form-group"><label class="form-label">Dest</label><input class="form-input" id="q-dst" type="number" value="3"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Priorité (1=haute)</label><input class="form-input" id="q-prio" type="number" value="3" min="1" max="10"></div>
+            <div class="form-group"><label class="form-label">Taille (Mo)</label><input class="form-input" id="q-size" type="number" value="1.5" step="0.1"></div>
+          </div>
+          <div class="form-group"><label class="form-label">Capacité max file</label><input class="form-input" id="q-cap" type="number" value="8"></div>
+          <div class="btn-group" style="margin-bottom:4px">
+            <button class="btn success" onclick="queueEnqueue()">+ Enfiler</button>
+            <button class="btn danger" onclick="queueDequeue()">− Défiler</button>
+          </div>
+          <div class="btn-group">
+            <button class="btn" onclick="queuePeek()">👁 Peek</button>
+            <button class="btn warn" onclick="queueSimulate()">⚡ Simuler 15 paq.</button>
+          </div>
+        </div>
+        <div class="result-card">
+          <div class="result-title">File d'Attente</div>
+          <div class="queue-container" id="queue-display"></div>
+        </div>
+        <div class="result-card">
+          <div class="result-title">Statistiques</div>
+          <div id="queue-stats"></div>
+        </div>
+        <div id="queue-log" class="log-output"></div>
+      </div>
+    </div>
+
+    <!-- MODULE PERF -->
+    <div id="mod-perf" style="display:none;flex-direction:column;height:100%">
+      <div class="panel-header">📊 Module 5 — Performance</div>
+      <div class="panel-body">
+        <div class="result-card">
+          <div class="result-title">Benchmark Comparatif</div>
+          <p style="font-size:11px;color:var(--text3);margin-bottom:8px;font-family:'JetBrains Mono',monospace">Dijkstra vs Bellman-Ford sur graphes croissants (V=10,25,50,100,200)</p>
+          <button class="btn primary" onclick="runBenchmark()">▶️ Lancer le Benchmark</button>
+        </div>
+        <div id="perf-result"></div>
+        <div class="result-card">
+          <div class="result-title">Complexités Théoriques</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;line-height:2.2">
+            <div><span style="color:var(--accent)">Dijkstra &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> O((V+E) log V)</div>
+            <div><span style="color:var(--accent4)">Bellman-Ford</span> O(V × E)</div>
+            <div><span style="color:var(--accent3)">DFS / BFS &nbsp;&nbsp;&nbsp;</span> O(V + E)</div>
+            <div><span style="color:var(--accent2)">Backtracking &nbsp;</span> O(b^d) élagué</div>
+            <div><span style="color:var(--danger)">Tarjan SCC &nbsp;&nbsp;</span> O(V + E)</div>
+            <div><span style="color:var(--text2)">K-plus courts &nbsp;</span> O(k(V+E) log V)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end panel -->
+</div><!-- end app -->
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let graph = { nodes: [], edges: [], directed: true };
+let selectedNode = null;
+let pathHighlight = [], visitedHighlight = [], bridgeHighlight = [], articulationHighlight = [];
+let queue = [], queueStats = { enqueued:0, dequeued:0, lost:0, capacity:8, pktId:1 };
+
+// ═══════════════════════════════════════════════════════════
+// D3 SVG SETUP
+// ═══════════════════════════════════════════════════════════
+const container = document.getElementById('svg-container');
+const W = () => container.clientWidth;
+const H = () => container.clientHeight;
+
+const svg = d3.select('#svg-container').append('svg');
+const defs = svg.append('defs');
+
+// Arrow markers — offset ajusté pour ne pas se cacher sous le nœud
+function makeArrow(id, color, refX) {
+  defs.append('marker').attr('id', id)
+    .attr('viewBox','0 -5 10 10').attr('refX', refX||20).attr('refY',0)
+    .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto')
+    .append('path').attr('d','M0,-5L10,0L0,5').attr('fill', color);
+}
+makeArrow('arr-default', '#2a4a7a', 20);
+makeArrow('arr-path',    '#00d4ff', 20);
+makeArrow('arr-visited', '#7c3aed', 20);
+makeArrow('arr-bridge',  '#f59e0b', 20);
+
+// Glow
+const filt = defs.append('filter').attr('id','glow');
+filt.append('feGaussianBlur').attr('stdDeviation','3').attr('result','coloredBlur');
+const fm = filt.append('feMerge');
+fm.append('feMergeNode').attr('in','coloredBlur');
+fm.append('feMergeNode').attr('in','SourceGraphic');
+
+const gRoot = svg.append('g');
+const edgeLayer = gRoot.append('g');
+const nodeLayer = gRoot.append('g');
+
+// Zoom + pan
+const zoom = d3.zoom().scaleExtent([0.15, 5])
+  .on('zoom', e => gRoot.attr('transform', e.transform));
+svg.call(zoom);
+
+function resetZoom() {
+  svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity.translate(W()/2, H()/2).scale(0.85).translate(-W()/2, -H()/2));
+}
+
+// ═══════════════════════════════════════════════════════════
+// DEMO DATA
+// ═══════════════════════════════════════════════════════════
+function loadDemo() {
+  graph.directed = true;
+  graph.nodes = [{id:0,name:'N0'},{id:1,name:'N1'},{id:2,name:'N2'},{id:3,name:'N3'},{id:4,name:'N4'},{id:5,name:'N5'},{id:6,name:'N6'},{id:7,name:'N7'}];
+  graph.edges = [
+    {src:0,dst:1,lat:10,bw:1000,cost:2,sec:9},
+    {src:0,dst:2,lat:20,bw:500,cost:1.5,sec:8},
+    {src:1,dst:2,lat:5,bw:800,cost:1,sec:10},
+    {src:1,dst:3,lat:15,bw:600,cost:3,sec:7},
+    {src:2,dst:4,lat:8,bw:700,cost:2,sec:9},
+    {src:3,dst:4,lat:12,bw:400,cost:2.5,sec:6},
+    {src:3,dst:5,lat:25,bw:300,cost:4,sec:5},
+    {src:4,dst:5,lat:7,bw:900,cost:1.5,sec:8},
+    {src:4,dst:6,lat:18,bw:350,cost:3.5,sec:7},
+    {src:5,dst:6,lat:6,bw:450,cost:1,sec:9},
+    {src:5,dst:7,lat:30,bw:200,cost:5,sec:4},
+    {src:6,dst:7,lat:9,bw:600,cost:2,sec:8},
+    {src:2,dst:6,lat:40,bw:150,cost:6,sec:3},
+    {src:0,dst:7,lat:60,bw:100,cost:8,sec:2}
+  ];
+  resetHighlights(); layoutAndRender();
+}
+
+function loadDemo2() {
+  graph.directed = true;
+  graph.nodes = Array.from({length:13},(_,i)=>({id:i,name:'N'+i}));
+  graph.edges = [
+    {src:3,dst:5,lat:55.7,bw:48,cost:3,sec:8},{src:12,dst:6,lat:79.4,bw:585,cost:9.2,sec:6},
+    {src:7,dst:1,lat:94.7,bw:576,cost:9.7,sec:3},{src:8,dst:11,lat:80.2,bw:36,cost:7,sec:6},
+    {src:10,dst:7,lat:74.3,bw:435,cost:13.9,sec:6},{src:5,dst:11,lat:63.6,bw:53,cost:3.5,sec:1},
+    {src:12,dst:4,lat:84.2,bw:209,cost:10.3,sec:7},{src:4,dst:5,lat:54.1,bw:111,cost:17.1,sec:1},
+    {src:2,dst:12,lat:83.3,bw:494,cost:19.4,sec:5},{src:2,dst:5,lat:72.1,bw:626,cost:7.8,sec:8},
+    {src:9,dst:5,lat:52.8,bw:296,cost:15.6,sec:6},{src:9,dst:10,lat:95.4,bw:223,cost:0.7,sec:9},
+    {src:0,dst:7,lat:76.5,bw:51,cost:13.7,sec:8},{src:1,dst:10,lat:20.8,bw:931,cost:6.2,sec:2},
+    {src:8,dst:10,lat:48.6,bw:14,cost:11.4,sec:2},{src:1,dst:6,lat:44,bw:119,cost:8.6,sec:2},
+    {src:9,dst:12,lat:12.1,bw:337,cost:16.5,sec:3},{src:4,dst:11,lat:3.9,bw:473,cost:12.7,sec:2},
+    {src:10,dst:6,lat:3.5,bw:374,cost:19.6,sec:6},{src:7,dst:6,lat:67.7,bw:618,cost:13.7,sec:4},
+    {src:6,dst:5,lat:23.2,bw:143,cost:17.2,sec:8},{src:4,dst:3,lat:11.1,bw:332,cost:13.2,sec:1},
+    {src:10,dst:9,lat:53.5,bw:688,cost:2.9,sec:1},{src:8,dst:0,lat:65.9,bw:923,cost:3.9,sec:10},
+    {src:5,dst:0,lat:50.9,bw:57,cost:11.8,sec:10},{src:12,dst:3,lat:57.3,bw:55,cost:10.1,sec:10}
+  ];
+  resetHighlights(); layoutAndRender();
+}
+
+function generateRandom() {
+  const n = 5 + Math.floor(Math.random()*6);
+  graph.nodes = Array.from({length:n},(_,i)=>({id:i,name:'N'+i}));
+  graph.edges = [];
+  for(let i=1;i<n;i++) addRandEdge(Math.floor(Math.random()*i), i);
+  for(let k=0;k<n*2;k++){const s=Math.floor(Math.random()*n),d=Math.floor(Math.random()*n);if(s!==d&&!graph.edges.find(e=>e.src===s&&e.dst===d)) addRandEdge(s,d);}
+  resetHighlights(); layoutAndRender();
+}
+
+function addRandEdge(s,d) {
+  graph.edges.push({src:s,dst:d,lat:+(1+Math.random()*99).toFixed(1),bw:+(10+Math.random()*990).toFixed(0),cost:+(0.5+Math.random()*19.5).toFixed(1),sec:Math.floor(1+Math.random()*10)});
+}
+
+// ═══════════════════════════════════════════════════════════
+// LOAD FROM FILE (.txt)
+// Format : "nb_noeuds nb_aretes oriente\nsrc dst lat bw cost sec\n..."
+// ═══════════════════════════════════════════════════════════
+function parseTxt(text) {
+  const lines = text.trim().split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#'));
+  if(lines.length < 1) return;
+  const header = lines[0].split(/\s+/);
+  const nb = parseInt(header[0]);
+  const oriente = header.length > 2 ? parseInt(header[2]) !== 0 : true;
+  graph.directed = oriente;
+  graph.nodes = Array.from({length:nb}, (_,i) => ({id:i, name:'N'+i}));
+  graph.edges = [];
+  for(let i=1; i<lines.length; i++) {
+    const p = lines[i].split(/\s+/);
+    if(p.length >= 2) {
+      graph.edges.push({
+        src:  parseInt(p[0]),
+        dst:  parseInt(p[1]),
+        lat:  parseFloat(p[2])||10,
+        bw:   parseFloat(p[3])||100,
+        cost: parseFloat(p[4])||1,
+        sec:  parseInt(p[5])  ||8
+      });
+    }
+  }
+  resetHighlights(); layoutAndRender();
+}
+
+function loadFromFile(input) {
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { parseTxt(e.target.result); };
+  reader.readAsText(file);
+}
+
+async function loadFromServer() {
+  const fname = document.getElementById('server-file').value.trim() || 'reseau_demo.txt';
+  try {
+    const r = await fetch(`/api/graph/load`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:'data/'+fname})});
+    const data = await r.json();
+    if(data.ok) {
+      const r2 = await fetch('/api/graph');
+      const gdata = await r2.json();
+      if(gdata.nodes) {
+        graph.nodes = gdata.nodes.map(n=>({id:n.id, name:n.name}));
+        graph.edges = gdata.edges.map(e=>({src:e.src,dst:e.dst,lat:e.lat,bw:e.bw,cost:e.cost,sec:e.sec}));
+        graph.directed = gdata.directed;
+        resetHighlights(); layoutAndRender();
+      }
+    }
+  } catch(e) {
+    // Serveur non disponible — essayer fetch direct du fichier
+    try {
+      const r = await fetch('data/'+fname);
+      const txt = await r.text();
+      parseTxt(txt);
+    } catch(e2) { alert('Fichier introuvable: ' + fname); }
+  }
+}
+
+function saveGraph() {
+  let txt = `${graph.nodes.length} ${graph.edges.length} ${graph.directed?1:0}\n`;
+  txt += `# src dst latence bande_passante cout securite\n`;
+  graph.edges.forEach(e => { txt += `${e.src} ${e.dst} ${e.lat} ${e.bw} ${e.cost} ${e.sec}\n`; });
+  const blob = new Blob([txt], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'reseau_custom.txt';
+  a.click();
+}
+
+// ═══════════════════════════════════════════════════════════
+// GRAPH OPERATIONS
+// ═══════════════════════════════════════════════════════════
+function clearGraph() { graph.nodes=[]; graph.edges=[]; selectedNode=null; resetHighlights(); render(); updateStats(); }
+
+function toggleOriented() {
+  graph.directed = !graph.directed;
+  document.getElementById('orient-label').textContent = graph.directed ? 'Orienté' : 'N-Orienté';
+  render(); updateStats();
+}
+
+function addNodeFromForm() {
+  const id = +document.getElementById('n-id').value;
+  const name = document.getElementById('n-name').value || 'N'+id;
+  if(graph.nodes.find(n=>n.id===id)) { alert(`Nœud ${id} existe déjà`); return; }
+  graph.nodes.push({id, name});
+  resetHighlights(); layoutAndRender();
+  // Auto-increment
+  document.getElementById('n-id').value = id+1;
+  document.getElementById('n-name').value = 'N'+(id+1);
+}
+
+function deleteNodeFromForm() {
+  const id = +document.getElementById('del-n-id').value;
+  graph.nodes = graph.nodes.filter(n=>n.id!==id);
+  graph.edges = graph.edges.filter(e=>e.src!==id&&e.dst!==id);
+  if(selectedNode===id) selectedNode=null;
+  resetHighlights(); render(); updateStats();
+}
+
+function addEdgeFromForm() {
+  const src  = +document.getElementById('e-src').value;
+  const dst  = +document.getElementById('e-dst').value;
+  const lat  = +document.getElementById('e-lat').value;
+  const bw   = +document.getElementById('e-bw').value;
+  const cost = +document.getElementById('e-cost').value;
+  const sec  = +document.getElementById('e-sec').value;
+  if(src===dst) { alert('Source ≠ Destination'); return; }
+  if(!graph.nodes.find(n=>n.id===src)) graph.nodes.push({id:src, name:'N'+src});
+  if(!graph.nodes.find(n=>n.id===dst)) graph.nodes.push({id:dst, name:'N'+dst});
+  // Mettre à jour si arête existe, sinon ajouter
+  const existing = graph.edges.find(e=>e.src===src&&e.dst===dst);
+  if(existing) { existing.lat=lat; existing.bw=bw; existing.cost=cost; existing.sec=sec; }
+  else graph.edges.push({src,dst,lat,bw,cost,sec});
+  resetHighlights(); layoutAndRender();
+}
+
+function deleteEdgeFromForm() {
+  const src = +document.getElementById('del-e-src').value;
+  const dst = +document.getElementById('del-e-dst').value;
+  graph.edges = graph.edges.filter(e=>!(e.src===src&&e.dst===dst));
+  resetHighlights(); render(); updateStats();
+}
+
+// ═══════════════════════════════════════════════════════════
+// LAYOUT (Force-directed)
+// ═══════════════════════════════════════════════════════════
+let simulation;
+
+function layoutAndRender() {
+  const nodes = graph.nodes.map(n => ({...n, x: n.x || W()/2 + Math.cos(n.id*0.9)*160, y: n.y || H()/2 + Math.sin(n.id*0.9)*160}));
+  const links = graph.edges.map(e => ({source:e.src, target:e.dst, ...e}));
+
+  if(simulation) simulation.stop();
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d=>d.id).distance(d=>90+d.lat/4))
+    .force('charge', d3.forceManyBody().strength(-350))
+    .force('center', d3.forceCenter(W()/2, H()/2))
+    .force('collision', d3.forceCollide(36))
+    .on('tick', () => {
+      nodes.forEach(n => { const gn=graph.nodes.find(x=>x.id===n.id); if(gn){gn.x=n.x;gn.y=n.y;} });
+      render();
+    });
+}
+
+function renderDrag(draggedId) {
+  const nMap = {};
+  graph.nodes.forEach(n => nMap[n.id] = n);
+  const R = 18;
+
+  // Mettre à jour position du nœud draggé
+  nodeLayer.selectAll('.node-g')
+    .filter(d => d.id === draggedId)
+    .attr('transform', d => {
+      const gn = nMap[d.id];
+      return gn ? `translate(${gn.x},${gn.y})` : '';
+    });
+
+  // Mettre à jour TOUTES les arêtes connectées à ce nœud
+  edgeLayer.selectAll('.edge-g')
+    .filter(e => e.src === draggedId || e.dst === draggedId)
+    .select('.edge-line')
+    .attr('d', e => {
+      const s = nMap[e.src], d = nMap[e.dst];
+      if (!s || !d) return '';
+      const hasReverse = graph.directed &&
+        graph.edges.find(x => x.src === e.dst && x.dst === e.src);
+      if (hasReverse) {
+        const mx = (s.x+d.x)/2, my = (s.y+d.y)/2;
+        const dx = d.x-s.x, dy = d.y-s.y;
+        const len = Math.sqrt(dx*dx+dy*dy) || 1;
+        const ox = -dy/len*22, oy = dx/len*22;
+        const cx = mx+ox, cy = my+oy;
+        const angle_s = Math.atan2(cy-s.y, cx-s.x);
+        const angle_e = Math.atan2(d.y-cy, d.x-cx);
+        const sx2 = s.x+Math.cos(angle_s)*R, sy2 = s.y+Math.sin(angle_s)*R;
+        const ex2 = d.x-Math.cos(angle_e)*R, ey2 = d.y-Math.sin(angle_e)*R;
+        return `M${sx2},${sy2} Q${cx},${cy} ${ex2},${ey2}`;
+      }
+      const angle = Math.atan2(d.y-s.y, d.x-s.x);
+      const sx2 = s.x+Math.cos(angle)*R, sy2 = s.y+Math.sin(angle)*R;
+      const ex2 = d.x-Math.cos(angle)*(R+2), ey2 = d.y-Math.sin(angle)*(R+2);
+      return `M${sx2},${sy2} L${ex2},${ey2}`;
+    });
+
+  // Mettre à jour les labels des arêtes connectées
+  edgeLayer.selectAll('.edge-g')
+    .filter(e => e.src === draggedId || e.dst === draggedId)
+    .select('.edge-weight')
+    .attr('x', e => {
+      const s=nMap[e.src], d=nMap[e.dst]; if(!s||!d) return 0;
+      const hasR=graph.directed&&graph.edges.find(x=>x.src===e.dst&&x.dst===e.src);
+      if(hasR){const dx=d.x-s.x,dy=d.y-s.y,len=Math.sqrt(dx*dx+dy*dy)||1;return (s.x+d.x)/2+(-dy/len)*22;}
+      return (s.x+d.x)/2;
+    })
+    .attr('y', e => {
+      const s=nMap[e.src], d=nMap[e.dst]; if(!s||!d) return 0;
+      const hasR=graph.directed&&graph.edges.find(x=>x.src===e.dst&&x.dst===e.src);
+      if(hasR){const dx=d.x-s.x,dy=d.y-s.y,len=Math.sqrt(dx*dx+dy*dy)||1;return (s.y+d.y)/2+(dx/len)*22-5;}
+      return (s.y+d.y)/2-6;
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════
+function render() {
+  const nMap = {};
+  graph.nodes.forEach(n => nMap[n.id] = n);
+  const R = 18; // node radius
+
+  // ── EDGES ──
+  // Pour graphe orienté : décaler les arêtes bidirectionnelles pour éviter chevauchement
+  const edgeSel = edgeLayer.selectAll('.edge-g').data(graph.edges, e=>`${e.src}-${e.dst}`);
+  const eEnter = edgeSel.enter().append('g').attr('class','edge-g');
+  eEnter.append('path').attr('class','edge-line');
+  eEnter.append('text').attr('class','edge-weight');
+  edgeSel.exit().remove();
+
+  const allEdges = edgeLayer.selectAll('.edge-g');
+
+  allEdges.select('.edge-line')
+    .attr('d', e => {
+      const s = nMap[e.src], d = nMap[e.dst];
+      if(!s || !d) return '';
+      // Vérifier si l'arête inverse existe (pour courber)
+      const hasReverse = graph.directed && graph.edges.find(x=>x.src===e.dst&&x.dst===e.src);
+      if(hasReverse) {
+        // Courbe quadratique pour séparer les deux arêtes
+        const mx = (s.x+d.x)/2, my = (s.y+d.y)/2;
+        const dx = d.x-s.x, dy = d.y-s.y;
+        const len = Math.sqrt(dx*dx+dy*dy)||1;
+        const ox = -dy/len*22, oy = dx/len*22;
+        // Point de contrôle décalé perpendiculairement
+        const cx = mx+ox, cy = my+oy;
+        // Start/end offset from circle edge
+        const angle_s = Math.atan2(cy-s.y, cx-s.x);
+        const angle_e = Math.atan2(d.y-cy, d.x-cx);
+        const sx = s.x+Math.cos(angle_s)*R, sy = s.y+Math.sin(angle_s)*R;
+        const ex = d.x-Math.cos(angle_e)*R, ey = d.y-Math.sin(angle_e)*R;
+        return `M${sx},${sy} Q${cx},${cy} ${ex},${ey}`;
+      }
+      // Ligne droite avec offset pour le marker
+      const angle = Math.atan2(d.y-s.y, d.x-s.x);
+      const sx = s.x+Math.cos(angle)*R, sy = s.y+Math.sin(angle)*R;
+      const ex = d.x-Math.cos(angle)*(R+2), ey = d.y-Math.sin(angle)*(R+2);
+      return `M${sx},${sy} L${ex},${ey}`;
+    })
+    .attr('fill','none')
+    .attr('stroke', e => {
+      if(pathHighlight.length>1)
+        for(let i=0;i<pathHighlight.length-1;i++)
+          if(pathHighlight[i]===e.src&&pathHighlight[i+1]===e.dst) return '#00d4ff';
+      if(bridgeHighlight.find(b=>b.src===e.src&&b.dst===e.dst)) return '#f59e0b';
+      return '#1e3a5f';
+    })
+    .attr('stroke-width', e => {
+      if(pathHighlight.length>1)
+        for(let i=0;i<pathHighlight.length-1;i++)
+          if(pathHighlight[i]===e.src&&pathHighlight[i+1]===e.dst) return 2.5;
+      return 1.5;
+    })
+    .attr('stroke-opacity', e => e.sec<=3 ? 0.55 : 1)
+    .attr('stroke-dasharray', e => e.sec<=3 ? '4 3' : null)
+    .attr('marker-end', e => {
+      if(!graph.directed) return null;
+      if(pathHighlight.length>1)
+        for(let i=0;i<pathHighlight.length-1;i++)
+          if(pathHighlight[i]===e.src&&pathHighlight[i+1]===e.dst) return 'url(#arr-path)';
+      if(bridgeHighlight.find(b=>b.src===e.src&&b.dst===e.dst)) return 'url(#arr-bridge)';
+      return 'url(#arr-default)';
+    });
+
+  // Edge labels — position sur la courbe
+  allEdges.select('.edge-weight')
+    .attr('x', e => {
+      const s=nMap[e.src],d=nMap[e.dst]; if(!s||!d) return 0;
+      const hasR=graph.directed&&graph.edges.find(x=>x.src===e.dst&&x.dst===e.src);
+      if(hasR){const mx=(s.x+d.x)/2,my=(s.y+d.y)/2,dx=d.x-s.x,dy=d.y-s.y,len=Math.sqrt(dx*dx+dy*dy)||1;return mx+(-dy/len)*22;}
+      return (s.x+d.x)/2;
+    })
+    .attr('y', e => {
+      const s=nMap[e.src],d=nMap[e.dst]; if(!s||!d) return 0;
+      const hasR=graph.directed&&graph.edges.find(x=>x.src===e.dst&&x.dst===e.src);
+      if(hasR){const mx=(s.x+d.x)/2,my=(s.y+d.y)/2,dx=d.x-s.x,dy=d.y-s.y,len=Math.sqrt(dx*dx+dy*dy)||1;return my+(dx/len)*22-5;}
+      return (s.y+d.y)/2-6;
+    })
+    .text(e => {
+      const m = document.getElementById('r-metric');
+      if(!m) return `${e.lat}ms`;
+      if(m.value==='cout') return `${e.cost}€`;
+      if(m.value==='securite') return `${e.sec}/10`;
+      return `${e.lat}ms`;
+    })
+    .attr('fill', e => e.sec<=3?'#ef4444':e.sec<=6?'#f59e0b':'#475569')
+    .attr('text-anchor','middle');
+
+  // ── NODES ──
+  const nodeSel = nodeLayer.selectAll('.node-g').data(graph.nodes, n=>n.id);
+  const nEnter = nodeSel.enter().append('g').attr('class','node-g').style('cursor','pointer');
+  nEnter.append('circle').attr('class','node-circle').attr('r', R);
+  nEnter.append('text').attr('class','node-label');
+  nodeSel.exit().remove();
+
+  const allNodes = nodeLayer.selectAll('.node-g');
+  allNodes.attr('transform', n=>`translate(${n.x||0},${n.y||0})`);
+
+  allNodes.select('.node-circle')
+    .attr('fill', n => {
+      if(articulationHighlight.includes(n.id)) return '#f59e0b';
+      if(pathHighlight[0]===n.id) return '#10b981';
+      if(pathHighlight[pathHighlight.length-1]===n.id&&pathHighlight.length>1) return '#ef4444';
+      if(pathHighlight.includes(n.id)) return '#00d4ff';
+      if(visitedHighlight.includes(n.id)) return '#7c3aed';
+      if(n.id===selectedNode) return '#3b82f6';
+      return '#1e40af';
+    })
+    .attr('stroke', n => {
+      if(n.id===selectedNode) return '#60a5fa';
+      if(articulationHighlight.includes(n.id)) return '#f59e0b';
+      if(pathHighlight.includes(n.id)) return '#00d4ff';
+      if(visitedHighlight.includes(n.id)) return '#7c3aed';
+      return '#2d4a7a';
+    })
+    .attr('stroke-width', n => n.id===selectedNode||articulationHighlight.includes(n.id)||pathHighlight.includes(n.id)?2.5:1.5)
+    .attr('filter', n => pathHighlight.includes(n.id)||articulationHighlight.includes(n.id)?'url(#glow)':null);
+
+  allNodes.select('.node-label').text(n=>n.name||`N${n.id}`);
+
+  allNodes.on('click', (evt,n) => {
+    evt.stopPropagation();
+    selectedNode = n.id;
+    document.getElementById('sel-badge').textContent = `N${n.id} (${n.name})`;
+    updateSelectedNodeCard(n);
+    render();
+  }).on('mouseover', (evt,n) => showTooltip(evt,n))
+    .on('mouseleave', () => hideTooltip());
+
+  // Drag (déplacer nœud avec souris — désactive le zoom pendant le drag)
+  /*allNodes.call(d3.drag()
+    .on('start', (evt,d) => {
+      evt.sourceEvent.stopPropagation();
+      if(simulation) simulation.alphaTarget(0.3).restart();
+      d.fx=d.x; d.fy=d.y;
+    })
+    .on('drag', (evt,d) => {
+      d.fx=evt.x; d.fy=evt.y; d.x=evt.x; d.y=evt.y;
+      render();
+    })
+    .on('end', (evt,d) => {
+      if(simulation) simulation.alphaTarget(0);
+      // Garder la position fixée après drag
+      d.fx=evt.x; d.fy=evt.y;
+    })
+  );  */
+
+  allNodes.call(d3.drag()
+    .on('start', (evt, d) => {
+      evt.sourceEvent.stopPropagation();
+      // Figer TOUS les autres nœuds — seul le nœud draggé bouge
+      if (simulation) {
+        simulation.stop();
+        graph.nodes.forEach(n => { n.fx = n.x; n.fy = n.y; });
+      }
+      d3.select(evt.sourceEvent.target.closest('.node-g'))
+        .select('.node-circle')
+        .attr('stroke', '#00d4ff')
+        .attr('stroke-width', 3)
+        .attr('filter', 'url(#glow)');
+    })
+    .on('drag', (evt, d) => {
+      evt.sourceEvent.stopPropagation();
+      // Mettre à jour la position du nœud dans graph.nodes
+      const gn = graph.nodes.find(n => n.id === d.id);
+      if (gn) { gn.x = evt.x; gn.y = evt.y; }
+      d.x = evt.x; d.y = evt.y;
+      d.fx = evt.x; d.fy = evt.y;
+      // Re-render uniquement les arêtes et ce nœud — fluide
+      renderDrag(d.id);
+    })
+    .on('end', (evt, d) => {
+      evt.sourceEvent.stopPropagation();
+      // Fixer définitivement la nouvelle position
+      const gn = graph.nodes.find(n => n.id === d.id);
+      if (gn) { gn.x = evt.x; gn.y = evt.y; gn.fx = evt.x; gn.fy = evt.y; }
+      d.x = evt.x; d.y = evt.y;
+      d.fx = evt.x; d.fy = evt.y;
+      // Restaurer le style normal
+      d3.select(evt.sourceEvent.target.closest('.node-g'))
+        .select('.node-circle')
+        .attr('stroke', d.id === selectedNode ? '#60a5fa' : '#2d4a7a')
+        .attr('stroke-width', 1.5)
+        .attr('filter', null);
+      render();
+    })
+  );
+
+  updateStats();
+}
+
+// ═══════════════════════════════════════════════════════════
+// STATS & MATRIX
+// ═══════════════════════════════════════════════════════════
+function updateStats() {
+  const n=graph.nodes.length, e=graph.edges.length;
+  document.getElementById('h-nodes').textContent=n;
+  document.getElementById('h-edges').textContent=e;
+  document.getElementById('h-type').textContent=graph.directed?'Orienté':'Non-Orienté';
+  document.getElementById('g-nodes').textContent=n;
+  document.getElementById('g-edges').textContent=e;
+  document.getElementById('g-orient').textContent=graph.directed?'Orienté':'Non-Orienté';
+  if(n>0) {
+    document.getElementById('g-degree').textContent=(e/n).toFixed(2);
+    const lats=graph.edges.map(e=>e.lat), bws=graph.edges.map(e=>e.bw);
+    if(lats.length>0){
+      document.getElementById('g-lat').textContent=(lats.reduce((a,b)=>a+b,0)/lats.length).toFixed(1)+'ms';
+      document.getElementById('g-bw').textContent=(bws.reduce((a,b)=>a+b,0)/bws.length).toFixed(0)+' Mbps';
+    }
+    updateMatrix();
+  }
+}
+
+/*function updateMatrix() {
+  const n=graph.nodes.length;
+  if(n===0||n>14){
+    document.getElementById('matrix-display').innerHTML=`<span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace">${n>14?'(> 14 nœuds — trop grand à afficher)':'(vide)'}</span>`;
+    return;
+  }
+  const ids=graph.nodes.map(n=>n.id).sort((a,b)=>a-b);
+  let html=`<table style="border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:9px"><tr><td style="padding:2px;color:var(--text3)"></td>`;
+  ids.forEach(j=>html+=`<td style="padding:2px;color:var(--text3);text-align:center">${j}</td>`);
+  html+='</tr>';
+  ids.forEach(i=>{
+    html+=`<tr><td style="padding:2px;color:var(--text3)">${i}</td>`;
+    ids.forEach(j=>{
+      const e=graph.edges.find(e=>e.src===i&&e.dst===j);
+      const v=e?e.lat.toFixed(0):'∞', col=e?'var(--accent)':'var(--text3)';
+      html+=`<td style="padding:2px;text-align:center;color:${col}">${v}</td>`;
+    });
+    html+='</tr>';
+  });
+  document.getElementById('matrix-display').innerHTML=html+'</table>';
+} */
+
+function updateMatrix() {
+  const V = graph.nodes.length;
+  const E = graph.edges.length;
+  if (V === 0) {
+    document.getElementById('rep-header').innerHTML = '';
+    document.getElementById('rep-display').innerHTML =
+      `<span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace">(vide)</span>`;
+    return;
+  }
+
+  // ── Calcul densité ──────────────────────────────────────────
+  const E_max = graph.directed ? V * (V - 1) : V * (V - 1) / 2;
+  const densite = E_max > 0 ? E / E_max : 0;
+  const estDense = densite > 0.20;  // seuil 20%
+
+  // ── Badge densité ───────────────────────────────────────────
+  const badgeColor = estDense ? '#ef4444' : '#10b981';
+  const badgeLabel = estDense ? '🔴 Dense' : '🟢 Creux';
+  const repLabel   = estDense ? 'Matrice d\'adjacence' : 'Liste d\'adjacence';
+  const repInfo    = estDense ? 'O(V²) mémoire' : 'O(V+E) mémoire';
+
+  document.getElementById('rep-header').innerHTML = `
+    <span style="background:${badgeColor}22;border:1px solid ${badgeColor}55;
+      color:${badgeColor};padding:2px 8px;border-radius:4px;
+      font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700">
+      ${badgeLabel}
+    </span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">
+      densité = ${E}/${E_max} = ${(densite*100).toFixed(1)}%
+      → ${repLabel} (${repInfo})
+    </span>`;
+
+  // ── Affichage adaptatif ─────────────────────────────────────
+  if (estDense) {
+    renderMatrice(V);
+  } else {
+    renderListeAdjacence(V);
+  }
+}
+
+// ── Matrice d'adjacence (graphe dense) ─────────────────────────
+function renderMatrice(V) {
+  if (V > 14) {
+    document.getElementById('rep-display').innerHTML =
+      `<span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace">
+        (> 14 nœuds — matrice trop grande à afficher)
+      </span>`;
+    return;
+  }
+  const ids = graph.nodes.map(n => n.id).sort((a,b) => a-b);
+  let html = `<table style="border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:9px">
+    <tr><td style="padding:2px;color:var(--text3)"></td>`;
+  ids.forEach(j => html +=
+    `<td style="padding:2px;color:var(--text3);text-align:center">${j}</td>`);
+  html += '</tr>';
+  ids.forEach(i => {
+    html += `<tr><td style="padding:2px;color:var(--text3)">${i}</td>`;
+    ids.forEach(j => {
+      const e = graph.edges.find(e => e.src===i && e.dst===j);
+      const v = e ? e.lat.toFixed(0) : '∞';
+      const col = e ? 'var(--accent)' : 'var(--text3)';
+      html += `<td style="padding:2px;text-align:center;color:${col}">${v}</td>`;
+    });
+    html += '</tr>';
+  });
+  document.getElementById('rep-display').innerHTML = html + '</table>';
+}
+
+// ── Liste d'adjacence (graphe creux) ───────────────────────────
+function renderListeAdjacence(V) {
+  const nMap = {};
+  graph.nodes.forEach(n => nMap[n.id] = n);
+
+  // Grouper arêtes par source
+  const adj = {};
+  graph.nodes.forEach(n => adj[n.id] = []);
+  graph.edges.forEach(e => {
+    if (adj[e.src] !== undefined)
+      adj[e.src].push(e);
+  });
+
+  let html = `<div style="display:flex;flex-direction:column;gap:3px">`;
+  graph.nodes.forEach(n => {
+    const voisins = adj[n.id];
+    html += `<div style="display:flex;align-items:center;gap:5px;
+      padding:3px 6px;border-radius:4px;
+      border:1px solid var(--border);font-size:10px">
+      <span style="min-width:28px;font-family:'JetBrains Mono',monospace;
+        font-weight:700;color:var(--accent)">${n.name}</span>
+      <span style="color:var(--text3)">→</span>
+      <span style="display:flex;flex-wrap:wrap;gap:3px">`;
+
+    if (voisins.length === 0) {
+      html += `<span style="color:var(--text3);font-style:italic;
+        font-family:'JetBrains Mono',monospace">∅</span>`;
+    } else {
+      voisins.forEach(e => {
+        const secCol = e.sec<=3?'#ef4444':e.sec<=6?'#f59e0b':'#10b981';
+        html += `<span title="lat=${e.lat}ms bw=${e.bw}Mbps sec=${e.sec}"
+          style="background:${secCol}15;border:1px solid ${secCol}40;
+          color:${secCol};padding:1px 6px;border-radius:3px;
+          font-family:'JetBrains Mono',monospace;font-size:9px;cursor:default">
+          N${e.dst}<span style="opacity:0.6">(${e.lat}ms)</span>
+        </span>`;
+      });
+    }
+    html += `</span></div>`;
+  });
+  html += `</div>`;
+  document.getElementById('rep-display').innerHTML = html;
+}
+
+function updateSelectedNodeCard(n) {
+  const card=document.getElementById('selected-node-card');
+  card.style.display='block';
+  const out=graph.edges.filter(e=>e.src===n.id), inp=graph.edges.filter(e=>e.dst===n.id);
+  let html=`
+    <div class="result-row"><span class="result-key">ID</span><span class="result-val">${n.id}</span></div>
+    <div class="result-row"><span class="result-key">Nom</span><span class="result-val">${n.name}</span></div>
+    <div class="result-row"><span class="result-key">Degrés sortants</span><span class="result-val">${out.length}</span></div>
+    <div class="result-row"><span class="result-key">Degrés entrants</span><span class="result-val">${inp.length}</span></div>`;
+  if(out.length>0){
+    html+=`<div style="margin-top:6px;font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace">Sorties :</div>`;
+    out.forEach(e=>{
+      const sc=e.sec<=3?'bad':e.sec<=6?'warn':'good';
+      html+=`<div class="result-row"><span class="result-key">→ N${e.dst}</span><span class="result-val ${sc}">${e.lat}ms · ${e.bw}Mbps · ${e.cost}€ · sec:${e.sec}</span></div>`;
+    });
+  }
+  document.getElementById('selected-node-info').innerHTML=html;
+}
+
+// ═══════════════════════════════════════════════════════════
+// TOOLTIP
+// ═══════════════════════════════════════════════════════════
+function showTooltip(evt,n) {
+  const tt=document.getElementById('tooltip');
+  const out=graph.edges.filter(e=>e.src===n.id);
+  let html=`<div style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent);margin-bottom:6px">${n.name} (N${n.id})</div>`;
+  html+=`<div style="font-size:11px;color:var(--text3)">Sorties: ${out.length}`;
+  if(out.length>0){const ms=Math.min(...out.map(e=>e.sec)),mb=Math.max(...out.map(e=>e.bw));html+=`<br>Sécurité min: ${ms}/10<br>BW max: ${mb} Mbps`;}
+  html+='</div>';
+  tt.innerHTML=html;
+  tt.style.opacity='1';
+  const rect=container.getBoundingClientRect();
+  tt.style.left=(evt.clientX-rect.left+12)+'px';
+  tt.style.top=(evt.clientY-rect.top-10)+'px';
+}
+function hideTooltip(){document.getElementById('tooltip').style.opacity='0';}
+
+// ═══════════════════════════════════════════════════════════
+// ALGORITHMS (JS)
+// ═══════════════════════════════════════════════════════════
+function getW(e,m){return m==='cout'?e.cost:m==='securite'?10-e.sec:e.lat;}
+
+function dijkstra(src,dst,metric) {
+  const ids=graph.nodes.map(n=>n.id);
+  const dist={},prev={},vis={};
+  ids.forEach(i=>{dist[i]=Infinity;prev[i]=-1;vis[i]=false;});
+  dist[src]=0;
+  const pq=[[0,src]];
+  while(pq.length>0){
+    pq.sort((a,b)=>a[0]-b[0]);
+    const [d,u]=pq.shift();
+    if(vis[u])continue; vis[u]=true;
+    if(u===dst)break;
+    for(const e of graph.edges.filter(e=>e.src===u)){
+      const v=e.dst,w=getW(e,metric);
+      if(!vis[v]&&dist[u]+w<dist[v]){dist[v]=dist[u]+w;prev[v]=u;pq.push([dist[v],v]);}
+    }
+  }
+  if(dist[dst]===Infinity)return null;
+  const path=[];for(let v=dst;v!==-1;v=prev[v])path.unshift(v);
+  let tl=0,mBW=Infinity,mSec=10;
+  for(let i=0;i<path.length-1;i++){const e=graph.edges.find(e=>e.src===path[i]&&e.dst===path[i+1]);if(e){tl+=e.lat;if(e.bw<mBW)mBW=e.bw;if(e.sec<mSec)mSec=e.sec;}}
+  return {path,cost:dist[dst],totalLat:tl,minBW:mBW===Infinity?0:mBW,minSec:mSec};
+}
+
+function bellmanFord(src,dst,metric) {
+  const ids=graph.nodes.map(n=>n.id);
+  const dist={},prev={};
+  ids.forEach(i=>{dist[i]=Infinity;prev[i]=-1;});
+  dist[src]=0;
+  for(let iter=0;iter<ids.length-1;iter++){
+    let upd=false;
+    for(const e of graph.edges){const w=getW(e,metric);if(dist[e.src]!==Infinity&&dist[e.src]+w<dist[e.dst]){dist[e.dst]=dist[e.src]+w;prev[e.dst]=e.src;upd=true;}}
+    if(!upd)break;
+  }
+  if(dist[dst]===Infinity)return null;
+  const path=[];for(let v=dst;v!==-1;v=prev[v]){path.unshift(v);if(path.length>ids.length)break;}
+  let tl=0,mBW=Infinity,mSec=10;
+  for(let i=0;i<path.length-1;i++){const e=graph.edges.find(e=>e.src===path[i]&&e.dst===path[i+1]);if(e){tl+=e.lat;if(e.bw<mBW)mBW=e.bw;if(e.sec<mSec)mSec=e.sec;}}
+  return {path,cost:dist[dst],totalLat:tl,minBW:mBW===Infinity?0:mBW,minSec:mSec};
+}
+
+function kPaths(src,dst,k,metric) {
+  const paths=[],pen={};
+  for(let iter=0;iter<k*3&&paths.length<k;iter++){
+    const saved=graph.edges.map(e=>({...e}));
+    for(const key in pen){const[s,d]=key.split('-').map(Number);const e=graph.edges.find(e=>e.src===s&&e.dst===d);if(e)e.lat+=pen[key];}
+    const ch=dijkstra(src,dst,metric);
+    graph.edges.forEach((e,i)=>{e.lat=saved[i].lat;});
+    if(ch){paths.push(ch);for(let i=0;i<ch.path.length-1;i++){const k2=`${ch.path[i]}-${ch.path[i+1]}`;pen[k2]=(pen[k2]||0)+1000*(iter+1);}}
+  }
+  return paths;
+}
+
+function dfsTraversal(start) {
+  const vis=[],stack=[start],seen=new Set();
+  while(stack.length>0){const u=stack.pop();if(seen.has(u))continue;seen.add(u);vis.push(u);const nb=graph.edges.filter(e=>e.src===u).map(e=>e.dst);for(let i=nb.length-1;i>=0;i--)if(!seen.has(nb[i]))stack.push(nb[i]);}
+  return vis;
+}
+
+function bfsTraversal(start) {
+  const vis=[],levels={},q=[start],seen=new Set([start]);levels[start]=0;
+  while(q.length>0){const u=q.shift();vis.push({id:u,level:levels[u]});const nb=graph.edges.filter(e=>e.src===u).map(e=>e.dst);for(const v of nb)if(!seen.has(v)){seen.add(v);levels[v]=levels[u]+1;q.push(v);}}
+  return vis;
+}
+
+function detectCycles() {
+  const color={};graph.nodes.forEach(n=>color[n.id]=0);
+  function dfs2(u){color[u]=1;for(const e of graph.edges.filter(e=>e.src===u)){const v=e.dst;if(color[v]===1)return true;if(color[v]===0&&dfs2(v))return true;}color[u]=2;return false;}
+  for(const n of graph.nodes)if(color[n.id]===0&&dfs2(n.id))return true;
+  return false;
+}
+
+function findArticulations() {
+  const disc={},low={},vis={};const ap=new Set();let timer=0;
+  function dfs(u,par){vis[u]=true;disc[u]=low[u]=timer++;let ch=0;
+    for(const e of graph.edges.filter(e=>e.src===u)){const v=e.dst;
+      if(!vis[v]){ch++;dfs(v,u);low[u]=Math.min(low[u],low[v]);if(par===-1&&ch>1)ap.add(u);if(par!==-1&&low[v]>=disc[u])ap.add(u);}
+      else if(v!==par)low[u]=Math.min(low[u],disc[v]);}}
+  graph.nodes.forEach(n=>{disc[n.id]=-1;});
+  graph.nodes.forEach(n=>{if(!vis[n.id])dfs(n.id,-1);});
+  return[...ap];
+}
+
+function findBridges() {
+  const disc={},low={},vis={};const br=[];let timer=0;
+  function dfs(u,par){vis[u]=true;disc[u]=low[u]=timer++;
+    for(const e of graph.edges.filter(e=>e.src===u)){const v=e.dst;
+      if(!vis[v]){dfs(v,u);low[u]=Math.min(low[u],low[v]);if(low[v]>disc[u])br.push({src:u,dst:v});}
+      else if(v!==par)low[u]=Math.min(low[u],disc[v]);}}
+  graph.nodes.forEach(n=>{disc[n.id]=-1;});
+  graph.nodes.forEach(n=>{if(!vis[n.id])dfs(n.id,-1);});
+  return br;
+}
+
+function findComponents() {
+  const comp={};const vis=new Set();let cid=0;
+  function bfs2(s,c){const q=[s];vis.add(s);while(q.length>0){const u=q.shift();comp[u]=c;const nb=new Set([...graph.edges.filter(e=>e.src===u).map(e=>e.dst),...graph.edges.filter(e=>e.dst===u).map(e=>e.src)]);for(const v of nb)if(!vis.has(v)){vis.add(v);q.push(v);}}}
+  graph.nodes.forEach(n=>{if(!vis.has(n.id)){bfs2(n.id,cid);cid++;}});
+  return{comp,count:cid};
+}
+
+function tarjanSCC() {
+  const disc={},low={},on={};const stk=[],sccs=[];let timer=0;
+  graph.nodes.forEach(n=>{disc[n.id]=-1;low[n.id]=0;on[n.id]=false;});
+  function dfs(u){disc[u]=low[u]=timer++;stk.push(u);on[u]=true;
+    for(const e of graph.edges.filter(e=>e.src===u)){const v=e.dst;
+      if(disc[v]===-1){dfs(v);low[u]=Math.min(low[u],low[v]);}else if(on[v])low[u]=Math.min(low[u],disc[v]);}
+    if(low[u]===disc[u]){const scc=[];let v;do{v=stk.pop();on[v]=false;scc.push(v);}while(v!==u);sccs.push(scc);}}
+  graph.nodes.forEach(n=>{if(disc[n.id]===-1)dfs(n.id);});
+  return sccs;
+}
+
+// ═══════════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════════
+function resetHighlights(){pathHighlight=[];visitedHighlight=[];bridgeHighlight=[];articulationHighlight=[];}
+
+function renderPathResult(res,algo,metric) {
+  if(!res)return`<div class="result-card"><div class="result-title">${algo}</div><div style="color:var(--danger);font-family:'JetBrains Mono',monospace;font-size:12px">❌ Aucun chemin trouvé</div></div>`;
+  const ph=res.path.map((n,i)=>`<span class="path-node">N${n}</span>${i<res.path.length-1?'<span class="path-arrow">→</span>':''}`).join('');
+  const sc=res.minSec<=3?'bad':res.minSec<=6?'warn':'good';
+  return`<div class="result-card" style="animation:slideIn .3s ease"><div class="result-title">✅ ${algo}</div><div class="path-display">${ph}</div>
+    <div class="result-row"><span class="result-key">Coût (${metric})</span><span class="result-val">${res.cost.toFixed(2)}</span></div>
+    <div class="result-row"><span class="result-key">Latence totale</span><span class="result-val">${res.totalLat.toFixed(1)} ms</span></div>
+    <div class="result-row"><span class="result-key">BW goulot</span><span class="result-val">${res.minBW} Mbps</span></div>
+    <div class="result-row"><span class="result-key">Sécurité min</span><span class="result-val ${sc}">${res.minSec}/10</span></div>
+    <div class="result-row"><span class="result-key">Longueur</span><span class="result-val">${res.path.length} nœuds</span></div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// ROUTING ACTIONS
+// ═══════════════════════════════════════════════════════════
+function runDijkstra() {
+  if(!graph.nodes.length)return;
+  const src=+document.getElementById('r-src').value,dst=+document.getElementById('r-dst').value,m=document.getElementById('r-metric').value;
+  const t0=performance.now(),res=dijkstra(src,dst,m),t=performance.now()-t0;
+  pathHighlight=res?res.path:[];visitedHighlight=[];render();
+  document.getElementById('routing-result').innerHTML=renderPathResult(res,'Dijkstra',m)+
+    `<div class="result-card"><div class="result-row"><span class="result-key">Temps exec.</span><span class="result-val good">${t.toFixed(4)} ms</span></div><div class="result-row"><span class="result-key">Complexité</span><span class="result-val">O((V+E) log V)</span></div></div>`;
+}
+
+function runBellmanFord() {
+  if(!graph.nodes.length)return;
+  const src=+document.getElementById('r-src').value,dst=+document.getElementById('r-dst').value,m=document.getElementById('r-metric').value;
+  const t0=performance.now(),res=bellmanFord(src,dst,m),t=performance.now()-t0;
+  pathHighlight=res?res.path:[];visitedHighlight=[];render();
+  document.getElementById('routing-result').innerHTML=renderPathResult(res,'Bellman-Ford',m)+
+    `<div class="result-card"><div class="result-row"><span class="result-key">Temps exec.</span><span class="result-val good">${t.toFixed(4)} ms</span></div><div class="result-row"><span class="result-key">Complexité</span><span class="result-val">O(V × E)</span></div></div>`;
+}
+
+function runCompare() {
+  if(!graph.nodes.length)return;
+  const src=+document.getElementById('r-src').value,dst=+document.getElementById('r-dst').value,m=document.getElementById('r-metric').value;
+  const t0=performance.now(),rd=dijkstra(src,dst,m),td=performance.now()-t0;
+  const t1=performance.now(),rb=bellmanFord(src,dst,m),tb=performance.now()-t1;
+  pathHighlight=rd?rd.path:[];render();
+  document.getElementById('routing-result').innerHTML=`
+    <div class="result-card" style="animation:slideIn .3s ease">
+      <div class="result-title">⚖️ Dijkstra vs Bellman-Ford</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0">
+        <div style="background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.2);border-radius:6px;padding:8px">
+          <div style="font-size:10px;color:var(--accent);font-family:'JetBrains Mono',monospace;margin-bottom:3px">DIJKSTRA</div>
+          <div style="font-size:14px;font-family:'JetBrains Mono',monospace">${rd?rd.cost.toFixed(2):'∞'}</div>
+          <div style="font-size:10px;color:var(--accent3);font-family:'JetBrains Mono',monospace">${td.toFixed(4)} ms</div>
+        </div>
+        <div style="background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:6px;padding:8px">
+          <div style="font-size:10px;color:var(--accent4);font-family:'JetBrains Mono',monospace;margin-bottom:3px">BELLMAN-FORD</div>
+          <div style="font-size:14px;font-family:'JetBrains Mono',monospace">${rb?rb.cost.toFixed(2):'∞'}</div>
+          <div style="font-size:10px;color:var(--accent3);font-family:'JetBrains Mono',monospace">${tb.toFixed(4)} ms</div>
+        </div>
+      </div>
+      <div class="result-row"><span class="result-key">Ratio BF/Dijkstra</span><span class="result-val ${tb/td>2?'warn':'good'}">${(tb/td).toFixed(2)}x plus lent</span></div>
+      <div class="result-row"><span class="result-key">Résultats identiques</span><span class="result-val ${rd&&rb&&Math.abs(rd.cost-rb.cost)<0.01?'good':'warn'}">${rd&&rb&&Math.abs(rd.cost-rb.cost)<0.01?'✅ OUI':'⚠️ Différents'}</span></div>
+    </div>`;
+}
+
+function runKPaths() {
+  if(!graph.nodes.length)return;
+  const src=+document.getElementById('k-src').value,dst=+document.getElementById('k-dst').value,k=+document.getElementById('k-val').value,m=document.getElementById('r-metric').value;
+  const paths=kPaths(src,dst,k,m);
+  if(paths.length>0)pathHighlight=paths[0].path;render();
+  const cols=['#00d4ff','#7c3aed','#10b981','#f59e0b','#ef4444'];
+  let html=`<div class="result-card" style="animation:slideIn .3s ease"><div class="result-title">🔢 ${k} Plus Courts Chemins</div>`;
+  paths.forEach((p,i)=>{
+    const ph=p.path.map((n,j)=>`<span style="background:${cols[i]}22;border:1px solid ${cols[i]}55;color:${cols[i]};padding:2px 6px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:10px">N${n}</span>${j<p.path.length-1?'<span style="color:var(--text3)"> → </span>':''}`).join('');
+    html+=`<div style="margin-bottom:8px;padding:6px;background:var(--bg);border-radius:4px"><div style="font-size:10px;color:${cols[i]};font-family:'JetBrains Mono',monospace;margin-bottom:4px">Chemin #${i+1} — coût: ${p.cost.toFixed(2)}</div><div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">${ph}</div></div>`;
+  });
+  if(!paths.length)html+=`<div style="color:var(--danger);font-size:12px">Aucun chemin trouvé</div>`;
+  document.getElementById('routing-result').innerHTML=html+'</div>';
+}
+
+function runConstrained() {
+  if(!graph.nodes.length)return;
+  const src=+document.getElementById('c-src').value,dst=+document.getElementById('c-dst').value;
+  const bwMin=+document.getElementById('c-bw').value,costMax=+document.getElementById('c-cost').value,secMin=+document.getElementById('c-sec').value;
+  let best=null;const vis=new Set();
+  function bt(u,path,cost,bw,sec){
+    if(cost>costMax)return;
+    if(bw<bwMin&&path.length>1)return;
+    if(sec<secMin&&path.length>1)return;
+    if(u===dst){
+      if(!best||cost<best.cost){const p=[...path];let tl=0,mB=Infinity,mS=10;for(let i=0;i<p.length-1;i++){const e=graph.edges.find(e=>e.src===p[i]&&e.dst===p[i+1]);if(e){tl+=e.lat;if(e.bw<mB)mB=e.bw;if(e.sec<mS)mS=e.sec;}}best={path:p,cost,totalLat:tl,minBW:mB===Infinity?0:mB,minSec:mS};}return;
+    }
+    for(const e of graph.edges.filter(e=>e.src===u)){const v=e.dst;if(!vis.has(v)){const nB=path.length===0?e.bw:Math.min(bw,e.bw),nS=Math.min(sec,e.sec),nC=cost+e.cost;if(nC<=costMax&&nB>=bwMin&&nS>=secMin){vis.add(v);path.push(v);bt(v,path,nC,nB,nS);path.pop();vis.delete(v);}}}
+  }
+  vis.add(src);bt(src,[src],0,Infinity,10);
+  pathHighlight=best?best.path:[];render();
+  document.getElementById('routing-result').innerHTML=renderPathResult(best,'Chemin Contraint (Backtracking)','latence')+
+    (best?`<div class="result-card"><div style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace">Contraintes: BW≥${bwMin}Mbps · Coût≤${costMax}€ · Sécurité≥${secMin}/10</div></div>`:'');
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECURITY ACTIONS
+// ═══════════════════════════════════════════════════════════
+function runDFS() {
+  if(!graph.nodes.length)return;
+  const start=+document.getElementById('trav-start').value;
+  const order=dfsTraversal(start);
+  visitedHighlight=[...order];pathHighlight=[];render();
+  const cols=['#7c3aed','#6d28d9','#5b21b6','#4c1d95'];
+  const steps=order.map((n,i)=>`<span class="step-node" style="background:${cols[i%4]}22;border-color:${cols[i%4]}55;color:${cols[i%4]};animation-delay:${i*70}ms">N${n}</span>`).join(' ');
+  document.getElementById('traversal-result').innerHTML=`<div class="result-card" style="animation:slideIn .3s ease"><div class="result-title">🔵 DFS — Ordre de visite</div><div class="traversal-steps">${steps}</div><div class="result-row" style="margin-top:6px"><span class="result-key">Visités</span><span class="result-val">${order.length} / ${graph.nodes.length}</span></div></div>`;
+}
+
+function runBFS() {
+  if(!graph.nodes.length)return;
+  const start=+document.getElementById('trav-start').value;
+  const order=bfsTraversal(start);
+  visitedHighlight=order.map(o=>o.id);pathHighlight=[];render();
+  const maxL=Math.max(...order.map(o=>o.level));
+  let html=`<div class="result-card" style="animation:slideIn .3s ease"><div class="result-title">🟢 BFS — Par niveaux</div>`;
+  for(let l=0;l<=maxL;l++){
+    const ns=order.filter(o=>o.level===l),lc=`hsl(${120+l*35},70%,60%)`;
+    html+=`<div style="margin-bottom:5px"><div class="step-level">Niveau ${l}</div><div style="display:flex;flex-wrap:wrap;gap:3px">`;
+    ns.forEach((o,i)=>html+=`<span class="step-node" style="background:${lc}22;border-color:${lc}55;color:${lc};animation-delay:${(l*ns.length+i)*55}ms">N${o.id}</span>`);
+    html+='</div></div>';
+  }
+  document.getElementById('traversal-result').innerHTML=html+`<div class="result-row"><span class="result-key">Visités</span><span class="result-val">${order.length} / ${graph.nodes.length}</span></div></div>`;
+}
+
+function runCycleDetect() {
+  const has=detectCycles();
+  document.getElementById('security-result').innerHTML=`<div class="result-card" style="animation:slideIn .3s ease"><div class="result-title">🔄 Détection de Cycles</div><div style="text-align:center;padding:10px;font-size:14px;font-family:'JetBrains Mono',monospace;color:${has?'var(--danger)':'var(--accent3)'}">${has?'⚠️ CYCLE(S) DÉTECTÉ(S)':'✅ AUCUN CYCLE'}</div><div style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace">${has?'Risque de boucle de routage. Analysez les SCC.':'Graphe acyclique (DAG). Aucune boucle de routage.'}</div></div>`;
+}
+
+function runArticulation() {
+  const aps=findArticulations();articulationHighlight=[...aps];bridgeHighlight=[];render();
+  let html=`<div class="result-card" style="animation:slideIn .3s ease"><div class="result-title">⚠️ Points d'Articulation (${aps.length})</div>`;
+  if(!aps.length)html+=`<div style="color:var(--accent3);font-size:12px">✅ Aucun point critique</div>`;
+  else aps.forEach(n=>html+=`<div class="result-row"><span class="sec-badge warn">⚠️ N${n}</span><span style="font-size:10px;color:var(--text3)">Suppression déconnecte le réseau</span></div>`);
+  document.getElementById('security-result').innerHTML=html+'</div>';
+}
+
+function runBridges() {
+  const br=findBridges();bridgeHighlight=br.map(b=>({src:b.src,dst:b.dst}));articulationHighlight=[];render();
+  let html=`<div class="result-card" style="animation:slideIn .3s ease"><div class="result-title">🌉 Ponts — Arêtes Critiques (${br.length})</div>`;
+  if(!br.length)html+=`<div style="color:var(--accent3);font-size:12px">✅ Aucun pont</div>`;
+  else br.forEach(b=>html+=`<div class="result-row"><span class="sec-badge warn">N${b.src} → N${b.dst}</span><span style="font-size:10px;color:var(--text3)">Arête critique</span></div>`);
+  document.getElementById('security-result').innerHTML=html+'</div>';
+}
+
+function runComponents() {
+  const{comp,count}=findComponents();const cols=['#00d4ff','#7c3aed','#10b981','#f59e0b','#ef4444','#ec4899'];
+  visitedHighlight=graph.nodes.map(n=>n.id);render();
+  let html=`<div class="result-card" style="animation:slideIn .3s ease"><div class="result-title">🔗 Composantes Connexes: ${count}</div>`;
+  html+=count>1?`<div style="color:var(--danger);font-size:11px;margin-bottom:6px">⚠️ Réseau non-connexe !</div>`:`<div style="color:var(--accent3);font-size:11px;margin-bottom:6px">✅ Réseau pleinement connexe</div>`;
+  for(let c=0;c<count;c++){const ms=graph.nodes.filter(n=>comp[n.id]===c);html+=`<div style="margin-bottom:5px"><div style="font-size:10px;color:${cols[c%6]};font-family:'JetBrains Mono',monospace;margin-bottom:3px">Composante ${c+1}</div><div style="display:flex;flex-wrap:wrap;gap:3px">`;ms.forEach(n=>html+=`<span style="background:${cols[c%6]}22;border:1px solid ${cols[c%6]}55;color:${cols[c%6]};padding:2px 6px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:10px">N${n.id}</span>`);html+='</div></div>';}
+  document.getElementById('security-result').innerHTML=html+'</div>';
+}
+
+function runTarjan() {
+  const sccs=tarjanSCC();const cols=['#00d4ff','#7c3aed','#10b981','#f59e0b','#ef4444','#ec4899'];
+  let html=`<div class="result-card" style="animation:slideIn .3s ease"><div class="result-title">🌀 Tarjan — ${sccs.length} SCC</div>`;
+  sccs.forEach((scc,i)=>{html+=`<div style="margin-bottom:5px"><div style="font-size:10px;color:${cols[i%6]};font-family:'JetBrains Mono',monospace;margin-bottom:3px">SCC #${i+1} (${scc.length} nœud${scc.length>1?'s':''})</div><div style="display:flex;flex-wrap:wrap;gap:3px">`;scc.forEach(n=>html+=`<span style="background:${cols[i%6]}22;border:1px solid ${cols[i%6]}55;color:${cols[i%6]};padding:2px 6px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:10px">N${n}</span>`);html+='</div></div>';});
+  html+=`<div class="result-row"><span class="result-key">SCCs > 1 nœud</span><span class="result-val">${sccs.filter(s=>s.length>1).length}</span></div>`;
+  document.getElementById('security-result').innerHTML=html+'</div>';
+}
+
+function runFullSecurity() {
+  const hasCy=detectCycles(),aps=findArticulations(),br=findBridges(),{comp,count}=findComponents(),sccs=tarjanSCC();
+  articulationHighlight=[...aps];bridgeHighlight=br.map(b=>({src:b.src,dst:b.dst}));render();
+  const le=graph.edges.filter(e=>e.sec<5);
+  let html=`<div class="result-card" style="animation:slideIn .3s ease;border-color:var(--accent2)"><div class="result-title" style="color:var(--accent2)">🛡️ Rapport de Sécurité Complet</div>
+    <div class="result-row"><span class="result-key">Cycles</span><span class="result-val ${hasCy?'bad':'good'}">${hasCy?'⚠️ OUI':'✅ NON'}</span></div>
+    <div class="result-row"><span class="result-key">Points critiques</span><span class="result-val ${aps.length?'warn':'good'}">${aps.length?`⚠️ ${aps.length} nœud(s)`:'✅ Aucun'}</span></div>
+    <div class="result-row"><span class="result-key">Ponts</span><span class="result-val ${br.length?'warn':'good'}">${br.length?`⚠️ ${br.length} arête(s)`:'✅ Aucun'}</span></div>
+    <div class="result-row"><span class="result-key">Connectivité</span><span class="result-val ${count>1?'bad':'good'}">${count>1?`⚠️ ${count} composantes`:'✅ Connexe'}</span></div>
+    <div class="result-row"><span class="result-key">SCC (Tarjan)</span><span class="result-val">${sccs.length} composante(s)</span></div>
+    <div class="result-row"><span class="result-key">Liens non-sécurisés</span><span class="result-val ${le.length?'bad':'good'}">${le.length?`⚠️ ${le.length}`:'✅ Aucun'}</span></div>
+    </div>`;
+  if(le.length){html+=`<div class="result-card"><div class="result-title">Liens à Risque (sec < 5)</div>`;le.forEach(e=>html+=`<div class="result-row"><span class="sec-badge critical">N${e.src}→N${e.dst}</span><span class="result-val bad">${e.sec}/10</span></div>`);html+='</div>';}
+  document.getElementById('security-result').innerHTML=html;
+}
+
+// ═══════════════════════════════════════════════════════════
+// QUEUE MODULE
+// ═══════════════════════════════════════════════════════════
+function getPrioColor(p){return p<=2?'#ef4444':p<=5?'#f59e0b':'#10b981';}
+
+function queueLog(msg,type='') {
+  const log=document.getElementById('queue-log');
+  const d=document.createElement('div'); d.className=`log-${type}`; d.textContent='> '+msg;
+  log.appendChild(d); log.scrollTop=log.scrollHeight;
+}
+
+function updateQueueDisplay() {
+  const el=document.getElementById('queue-display');
+  if(!queue.length){el.innerHTML='<div style="color:var(--text3);font-family:\'JetBrains Mono\',monospace;font-size:11px;text-align:center;padding:10px">(file vide)</div>';updateQueueStats();return;}
+  el.innerHTML=queue.map((p,i)=>`<div class="queue-item ${i===0?'top':''}"><div class="queue-prio" style="background:${getPrioColor(p.prio)}22;color:${getPrioColor(p.prio)};border:1px solid ${getPrioColor(p.prio)}55">${p.prio}</div><div class="queue-info"><div class="queue-id">P${p.id}</div><div class="queue-meta">${p.size}Mo · N${p.src}→N${p.dst}</div></div></div>`).join('');
+  updateQueueStats();
+}
+
+function updateQueueStats() {
+  const cap=queueStats.capacity===Infinity?'∞':queueStats.capacity;
+  document.getElementById('queue-stats').innerHTML=`
+    <div class="result-row"><span class="result-key">En file</span><span class="result-val">${queue.length} / ${cap}</span></div>
+    <div class="result-row"><span class="result-key">Total enfilés</span><span class="result-val">${queueStats.enqueued}</span></div>
+    <div class="result-row"><span class="result-key">Total défilés</span><span class="result-val">${queueStats.dequeued}</span></div>
+    <div class="result-row"><span class="result-key">Perdus</span><span class="result-val ${queueStats.lost?'bad':'good'}">${queueStats.lost}</span></div>
+    <div class="result-row"><span class="result-key">Taux de perte</span><span class="result-val ${queueStats.lost?'warn':'good'}">${queueStats.enqueued>0?(queueStats.lost/queueStats.enqueued*100).toFixed(1)+'%':'0%'}</span></div>`;
+}
+
+function queueEnqueue() {
+  const cap=+document.getElementById('q-cap').value||0; queueStats.capacity=cap||Infinity;
+  if(cap>0&&queue.length>=cap){queueStats.lost++;queueLog(`Paquet perdu (file pleine ${queue.length}/${cap})`,'err');updateQueueDisplay();return;}
+  const pkt={id:queueStats.pktId++,prio:+document.getElementById('q-prio').value,src:+document.getElementById('q-src').value,dst:+document.getElementById('q-dst').value,size:+document.getElementById('q-size').value};
+  queue.push(pkt);queue.sort((a,b)=>a.prio-b.prio);queueStats.enqueued++;
+  queueLog(`P${pkt.id} enfilé (prio=${pkt.prio}, ${pkt.size}Mo, N${pkt.src}→N${pkt.dst})`);
+  updateQueueDisplay();
+}
+
+function queueDequeue() {
+  if(!queue.length){queueLog('File vide','warn');return;}
+  const p=queue.shift();queueStats.dequeued++;
+  queueLog(`P${p.id} défilé (prio=${p.prio}, N${p.src}→N${p.dst})`,'info');
+  updateQueueDisplay();
+}
+
+function queuePeek() {
+  if(!queue.length){queueLog('File vide','warn');return;}
+  const p=queue[0]; queueLog(`PEEK: P${p.id} (prio=${p.prio}, ${p.size}Mo, N${p.src}→N${p.dst})`);
+}
+
+function queueSimulate() {
+  const cap=+document.getElementById('q-cap').value||8; queueStats.capacity=cap; queue=[];
+  const nn=Math.max(graph.nodes.length,4);
+  for(let i=0;i<15;i++){
+    const pkt={id:queueStats.pktId++,prio:1+Math.floor(Math.random()*10),src:Math.floor(Math.random()*nn),dst:Math.floor(Math.random()*nn),size:+(0.1+Math.random()*10).toFixed(1)};
+    if(cap>0&&queue.length>=cap){queueStats.lost++;queueLog(`P${pkt.id} PERDU (file pleine)`,'err');}
+    else{queue.push(pkt);queue.sort((a,b)=>a.prio-b.prio);queueStats.enqueued++;queueLog(`P${pkt.id} enfilé (prio=${pkt.prio})`);}
+  }
+  updateQueueDisplay();
+  queueLog(`Simulation: 15 paquets · En file: ${queue.length} · Perdus: ${queueStats.lost}`,'warn');
+}
+
+// ═══════════════════════════════════════════════════════════
+// BENCHMARK
+// ═══════════════════════════════════════════════════════════
+function runBenchmark() {
+  const sizes=[10,25,50,100,200];const res=[];
+  for(const n of sizes){
+    const nodes=Array.from({length:n},(_,i)=>({id:i,name:'N'+i}));
+    const edges=[];
+    for(let i=1;i<n;i++){const j=Math.floor(Math.random()*i);edges.push({src:j,dst:i,lat:1+Math.random()*99,bw:100,cost:1,sec:8});}
+    for(let k=0;k<n*2;k++){const s=Math.floor(Math.random()*n),d=Math.floor(Math.random()*n);if(s!==d&&!edges.find(e=>e.src===s&&e.dst===d))edges.push({src:s,dst:d,lat:1+Math.random()*99,bw:100,cost:1,sec:8});}
+    const oldG={...graph}; graph={nodes,edges,directed:true};
+    let td=0,tb=0;const reps=3;
+    for(let r=0;r<reps;r++){let t0=performance.now();dijkstra(0,n-1,'latence');td+=performance.now()-t0;t0=performance.now();bellmanFord(0,n-1,'latence');tb+=performance.now()-t0;}
+    graph=oldG; res.push({n,e:edges.length,td:td/reps,tb:tb/reps});
+  }
+  const maxT=Math.max(...res.map(r=>r.tb));
+  let html=`<div class="result-card" style="animation:slideIn .3s ease"><div class="result-title">📊 Résultats Benchmark</div>`;
+  res.forEach(r=>{
+    html+=`<div style="margin-bottom:10px"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-bottom:3px">V=${r.n}, E≈${r.e}</div>
+      <div class="perf-row"><div class="perf-label" style="color:var(--accent)">Dijk</div><div class="perf-bar-wrap"><div class="perf-bar" style="width:${Math.max(2,r.td/maxT*100)}%;background:var(--accent)"></div></div><div class="perf-val" style="color:var(--accent)">${r.td.toFixed(3)}ms</div></div>
+      <div class="perf-row"><div class="perf-label" style="color:var(--accent4)">BF</div><div class="perf-bar-wrap"><div class="perf-bar" style="width:${Math.max(2,r.tb/maxT*100)}%;background:var(--accent4)"></div></div><div class="perf-val" style="color:var(--accent4)">${r.tb.toFixed(3)}ms</div></div>
+      </div>`;
+  });
+  document.getElementById('perf-result').innerHTML=html+'</div>';
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODULE SWITCHING
+// ═══════════════════════════════════════════════════════════
+function switchModule(mod) {
+  document.querySelectorAll('.module-tab').forEach(t=>{
+    const active=t.dataset.mod===mod;
+    t.classList.toggle('active',active);
+    t.querySelector('.tab-icon').style.background=active?'rgba(0,212,255,.15)':'';
+  });
+  ['graph','routing','security','queue','perf'].forEach(m=>{
+    const el=document.getElementById(`mod-${m}`);
+    if(el)el.style.display=m===mod?'flex':'none';
+  });
+  const labels={graph:'Graphe',routing:'Routage',security:'Sécurité',queue:'File',perf:'Performance'};
+  document.getElementById('h-mode').textContent=labels[mod];
+  if(mod==='queue')updateQueueDisplay();
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('resize',()=>{
+  if(simulation)simulation.force('center',d3.forceCenter(W()/2,H()/2)).restart();
+});
+
+loadDemo();
+switchModule('graph');
+</script>
+</body>
+</html>
