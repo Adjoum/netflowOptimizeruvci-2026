@@ -9,7 +9,7 @@
 ![Tests](https://img.shields.io/badge/Tests-29%2F29%20✅-brightgreen?style=for-the-badge)
 
 **Projet ALC2101 — Algorithmique et Complexité**  
-UVCI · INP-HB · 2025-2026
+UVCI · 2025-2026
 
 [Démonstration](#démonstration) · [Installation](#installation) · [Architecture](#architecture) · [Modules](#modules) · [Tests](#tests)
 
@@ -174,8 +174,8 @@ cmd /c start.bat
 
 ```bash
 # 1. Cloner le dépôt
-git clone https://github.com/votre-username/NetFlowOptimizer.git
-cd NetFlowOptimizer
+git clone https://github.com/Adjoum/netflowOptimizeruvci-2026.git
+cd netflowOptimizeruvci-2026
 
 # 2. Installer les dépendances Python
 pip install flask flask-cors
@@ -310,14 +310,22 @@ echo '{"cmd":"benchmark"}' | ./netflow.exe --api
 
 ---
 
-## Auteur
+## Auteurs:
 
-**Adjoumani Koffi Wilfried**  
-Étudiant Master 1 Big Data Analytics — UVCI / INP-HB  
+
+-	**ADJOUMANI KOFFI WILFRID**
+-	**HIEN BEBE** 
+-	**KONAN KOUAME SERGE OLIVIER** 
+-	**EFFI DOMINIQUE ALAIN ROMEO** 
+-	**DAGO LAGBRE MOLIERE**
+-	**KOUADIO KOFFI MODESTE**
+-	**BROU YAPI ANGE ANDERSON**
+
+Étudiants Master 1 Big Data Analytics — UVCI   
 Côte d'Ivoire · 2025-2026
 
 - Portfolio : [adjoumani-koffi.com](https://adjoumani-koffi.com)
-- GitHub : [@votre-username](https://github.com/votre-username)
+- GitHub : [Adjoum](https://github.com/Adjoum)
 
 ---
 
